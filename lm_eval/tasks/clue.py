@@ -2,12 +2,11 @@ import datasets
 from math import exp
 from functools import partial
 from packaging import version
-from lm_eval.base import rf,Task,mean
-
-
-
-
-
+from lm_eval.base import rf,Task,mean,MultipleChoiceTask
+from lm_eval.metrics import yesno
+import re  
+import numpy as np 
+from lm_eval.utils import general_detokenize 
 
 _CITATION = """
 """
@@ -35,30 +34,49 @@ class Cmrc2018(Task):
     # `DATASET_PATH`. If there aren't specific subsets you need, leave this as `None`.
     DATASET_NAME = None
 
+
     def has_training_docs(self):
-        # TODO: Fill in the return with `True` if the Task has training data; else `False`.
         return True
 
     def has_validation_docs(self):
-        # TODO: Fill in the return with `True` if the Task has validation data; else `False`.
         return True
 
     def has_test_docs(self):
-        # TODO: Fill in the return with `True` if the Task has test data; else `False`.
-        return True
+        return False
 
     def training_docs(self):
         if self.has_training_docs():
+            # We cache training documents in `self._training_docs` for faster
+            # few-shot processing. If the data is too large to fit in memory,
+            # return the training data as a generator instead of a list.
             if self._training_docs is None:
+                # TODO: Return the training document generator from `self.dataset`.
+                # If you need to process the data, `map` over the documents with
+                # the custom processing function, `self._process_doc`. E.g.
+                # `map(self._process_doc, self.dataset["validation"])`
+                # In most case you can leave this as is unless the dataset split is
+                # named differently than the default `"train"`.
                 self._training_docs = list(self.dataset["train"])
             return self._training_docs
 
     def validation_docs(self):
         if self.has_validation_docs():
+            # TODO: Return the validation document generator from `self.dataset`.
+            # If you need to process the data, `map` over the documents with the
+            # custom processing function, `self._process_doc`. E.g.
+            # `map(self._process_doc, self.dataset["validation"])`
+            # In most case you can leave this as is unless the dataset split is
+            # named differently than the default `"validation"`.
             return self.dataset["validation"]
 
     def test_docs(self):
         if self.has_test_docs():
+            # TODO: Return the test document generator from `self.dataset`.
+            # If you need to process the data, `map` over the documents with the
+            # custom processing function, `self._process_doc`. E.g.
+            # `map(self._process_doc, self.dataset["test"])`
+            # In most case you can leave this as is unless the dataset split is
+            # named differently than the default `"test"`.
             return self.dataset["test"]
 
     #def _process_doc(self, doc):
@@ -69,9 +87,14 @@ class Cmrc2018(Task):
         # NOTE: DELETE THIS FUNCTION IF UNUSED.
     #    return doc
 
-    
     def doc_to_text(self, doc):
-        return "{}\nQuestion: {}\nAnswer:\n".format(doc['context'],doc['question'])
+        return (doc["context"]
+            + "\n\n"
+            + "Question: "
+            + doc["question"]
+            + "\n\n"
+            + "Answer:"
+        )
 
     def doc_to_target(self, doc):
         # TODO: Fill in the `target` ("gold answer") variable.
@@ -200,3 +223,255 @@ class Cmrc2018(Task):
             "best_exact": True,  # Best exact match (with varying threshold)
             "best_f1": True,  # Best F1 (with varying threshold)
         }
+    
+
+class OCNLI(Task):
+    VERSION = 0
+    DATASET_PATH = "clue"
+    DATASET_NAME = "ocnli"
+
+    def has_training_docs(self):
+        return True
+
+    def has_validation_docs(self):
+        return True
+
+    def has_test_docs(self):
+        return False
+
+    def training_docs(self):
+        if self._training_docs is None:
+            self._training_docs = list(self.dataset["train"])
+        return self._training_docs
+
+    def validation_docs(self):
+        if self.has_validation_docs():
+            return self.dataset["validation"]
+
+    def test_docs(self):
+        if self.has_test_docs():
+            return self.dataset["validation"]
+
+    def doc_to_text(self, doc):
+        return "{}\nQuestion: {} True, False or Neither?\nAnswer:".format(
+            doc["sentence1"],
+            doc["sentence2"].strip()
+            + ("" if doc["sentence2"].strip().endswith(".") else "."),
+        )
+
+    def doc_to_target(self, doc):
+        # True = entailment
+        # False = contradiction
+        # Neither = neutral
+        return " {}".format({0: "True", 1: "Neither", 2: "False"}[doc["label"]])
+
+    def construct_requests(self, doc, ctx):
+        ll_true, _ = rf.loglikelihood(ctx, " True")
+        ll_neither, _ = rf.loglikelihood(ctx, " Neither")
+        ll_false, _ = rf.loglikelihood(ctx, " False")
+        return ll_true, ll_neither, ll_false
+
+    def process_results(self, doc, results):
+        gold = doc["label"]
+        pred = np.argmax(results)
+        return {"acc": pred == gold}
+
+    def higher_is_better(self):
+        return {"acc": True}
+
+    def aggregation(self):
+        return {"acc": mean}
+    
+    
+    
+class AFQMC(Task):
+    '''Similarity test'''
+    VERSION = 0
+    DATASET_PATH = "clue"
+    DATASET_NAME = "afqmc"
+
+    def has_training_docs(self):
+        return True
+
+    def has_validation_docs(self):
+        return True
+
+    def has_test_docs(self):
+        return False
+
+    def training_docs(self):
+        if self.has_training_docs():
+            # We cache training documents in `self._training_docs` for faster
+            # few-shot processing. If the data is too large to fit in memory,
+            # return the training data as a generator instead of a list.
+            if self._training_docs is None:
+                # TODO: Return the training document generator from `self.dataset`.
+                # If you need to process the data, `map` over the documents with
+                # the custom processing function, `self._process_doc`. E.g.
+                # `map(self._process_doc, self.dataset["validation"])`
+                # In most case you can leave this as is unless the dataset split is
+                # named differently than the default `"train"`.
+                self._training_docs = list(self.dataset["train"])
+            return self._training_docs
+
+    def validation_docs(self):
+        if self.has_validation_docs():
+            # TODO: Return the validation document generator from `self.dataset`.
+            # If you need to process the data, `map` over the documents with the
+            # custom processing function, `self._process_doc`. E.g.
+            # `map(self._process_doc, self.dataset["validation"])`
+            # In most case you can leave this as is unless the dataset split is
+            # named differently than the default `"validation"`.
+            return self.dataset["validation"]
+
+    def test_docs(self):
+        if self.has_test_docs():
+            # TODO: Return the test document generator from `self.dataset`.
+            # If you need to process the data, `map` over the documents with the
+            # custom processing function, `self._process_doc`. E.g.
+            # `map(self._process_doc, self.dataset["test"])`
+            # In most case you can leave this as is unless the dataset split is
+            # named differently than the default `"test"`.
+            return self.dataset["test"]
+
+    def doc_to_text(self, doc):
+        return "Sentence 1: {}\nSentence 2: {}\nQuestion: Do both sentences mean the same thing?\nAnswer:".format(
+            general_detokenize(doc["sentence1"]),
+            general_detokenize(doc["sentence2"]),
+        )
+
+    def doc_to_target(self, doc):
+        return " {}".format(yesno(doc["label"]))
+
+    def construct_requests(self, doc, ctx):
+        ll_yes, _ = rf.loglikelihood(ctx, " yes")
+        ll_no, _ = rf.loglikelihood(ctx, " no")
+        return ll_yes, ll_no
+
+    def process_results(self, doc, results):
+        ll_yes, ll_no = results
+        gold = doc["label"]
+        pred = ll_yes > ll_no
+        return {
+            "acc": pred == gold,
+            "f1": (gold, pred),
+        }
+
+    def higher_is_better(self):
+        return {"acc": True, "f1": True}
+
+    def aggregation(self):
+        return {"acc": mean, "f1": f1_score}
+    
+    
+class C3(MultipleChoiceTask):
+    VERSION = 0
+    DATASET_PATH = "clue"
+    DATASET_NAME = "c3"
+
+    def has_training_docs(self):
+        return True
+
+    def has_validation_docs(self):
+        return True
+
+    def has_test_docs(self):
+        return False
+
+    def training_docs(self):
+        if self.has_training_docs():
+            # We cache training documents in `self._training_docs` for faster
+            # few-shot processing. If the data is too large to fit in memory,
+            # return the training data as a generator instead of a list.
+            if self._training_docs is None:
+                # TODO: Return the training document generator from `self.dataset`.
+                # In most case you can leave this as is unless the dataset split is
+                # named differently than the default `"train"`.
+                self._training_docs = list(
+                    map(self._process_doc, self.dataset["train"])
+                )
+            return self._training_docs
+
+    def validation_docs(self):
+        if self.has_validation_docs():
+            # TODO: Return the validation document generator from `self.dataset`.
+            # In most case you can leave this as is unless the dataset split is
+            # named differently than the default `"validation"`.
+            return map(self._process_doc, self.dataset["validation"])
+
+    def test_docs(self):
+        if self.has_test_docs():
+            # TODO: Return the test document generator from `self.dataset`.
+            # In most case you can leave this as is unless the dataset split is
+            # named differently than the default `"test"`.
+            return map(self._process_doc, self.dataset["test"])
+
+    def _process_doc(self, doc):
+        out_doc = {
+            "source": doc['context'],
+            "query": "Question: " + doc["question"] + "\nAnswer:",
+            "choices": doc["choice"],
+            "gold": doc["choice"].index(doc["answer"]),
+        }
+        return out_doc
+
+    def doc_to_text(self, doc):
+        return doc["query"]
+    
+
+class CHID(MultipleChoiceTask):
+    VERSION = 0
+    DATASET_PATH = "YuAnthony/chid"#"clue"
+    DATASET_NAME = None
+
+    #def __init__(self):
+    #    super().__init__(cache_dir='/content/chid', download_mode=datasets.DownloadMode.REUSE_DATASET_IF_EXISTS)
+
+    def has_training_docs(self):
+        return True
+
+    def has_validation_docs(self):
+        return True
+
+    def has_test_docs(self):
+        return False
+
+    def training_docs(self):
+        if self.has_training_docs():
+            # We cache training documents in `self._training_docs` for faster
+            # few-shot processing. If the data is too large to fit in memory,
+            # return the training data as a generator instead of a list.
+            if self._training_docs is None:
+                # TODO: Return the training document generator from `self.dataset`.
+                # In most case you can leave this as is unless the dataset split is
+                # named differently than the default `"train"`.
+                self._training_docs = list(
+                    map(self._process_doc, self.dataset["train"])
+                )
+            return self._training_docs
+
+    def validation_docs(self):
+        if self.has_validation_docs():
+            # TODO: Return the validation document generator from `self.dataset`.
+            # In most case you can leave this as is unless the dataset split is
+            # named differently than the default `"validation"`.
+            return map(self._process_doc, self.dataset["validation"])
+
+    def test_docs(self):
+        if self.has_test_docs():
+            # TODO: Return the test document generator from `self.dataset`.
+            # In most case you can leave this as is unless the dataset split is
+            # named differently than the default `"test"`.
+            return map(self._process_doc, self.dataset["test"])
+
+    def _process_doc(self, doc):
+        out_doc = {
+            "source":re.sub('#idiom\d+#', '<MASK>', doc['content'][0]),
+            "query": "Question: Which of the following alternatives fit in place of <MASK>?\nAnswer:",
+            "choices": doc["candidates"],
+            "gold": doc["labels"][0]#choices.index(doc["answers"]["text"][0]),
+        }
+        return out_doc
+
+    def doc_to_text(self, doc):
+        return doc["source"] + " " +doc["query"]

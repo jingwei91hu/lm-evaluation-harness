@@ -88,6 +88,10 @@ all_translation_benchmarks = {
 TASK_REGISTRY = {
     # CLUE
     "cmrc2018":clue.Cmrc2018,
+    "ocnli":clue.OCNLI,
+    "afqmc":clue.AFQMC,
+    "c3":clue.C3,
+    "chid":clue.CHID,
     # GLUE
     "cola": glue.CoLA,
     "mnli": glue.MNLI,
