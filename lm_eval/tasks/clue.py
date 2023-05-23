@@ -421,7 +421,7 @@ class C3(MultipleChoiceTask):
 
 class CHID(MultipleChoiceTask):
     VERSION = 0
-    DATASET_PATH = "YuAnthony/chid"#"clue"
+    DATASET_PATH = "YuAnthony/chid"
     DATASET_NAME = None
 
     #def __init__(self):
@@ -475,3 +475,70 @@ class CHID(MultipleChoiceTask):
 
     def doc_to_text(self, doc):
         return doc["source"] + " " +doc["query"]
+    
+    
+    
+class SGWinogradSchemaChallenge(Task):
+    VERSION = 0
+    
+    DATASET_PATH = "clue"
+    DATASET_NAME = "cluewsc2020"
+
+    def has_training_docs(self):
+        return True
+
+    def has_validation_docs(self):
+        return True
+
+    def has_test_docs(self):
+        return False
+
+
+    def validation_docs(self):
+        return self.dataset["validation"]
+
+    def doc_to_text(self, doc):
+        raw_passage = doc["text"]
+        # NOTE: HuggingFace span indices are word-based not character-based.
+        pre = " ".join(raw_passage.split()[: doc["span2_index"]])
+        post = raw_passage[len(pre) + len(doc["span2_text"]) + 1 :]
+        passage = general_detokenize(pre + " *{}*".format(doc["span2_text"]) + post)
+        noun = doc["span1_text"]
+        pronoun = doc["span2_text"]
+        text = (
+            f"Passage: {passage}\n"
+            + f'Question: In the passage above, does the pronoun "*{pronoun}*" refer to "*{noun}*"?\n'
+            + "Answer:"
+        )
+        return text
+
+    def doc_to_target(self, doc):
+        return " " + yesno(doc["label"])
+
+    def construct_requests(self, doc, ctx):
+
+        ll_yes, _ = rf.loglikelihood(ctx, " yes")
+        ll_no, _ = rf.loglikelihood(ctx, " no")
+
+        return ll_yes, ll_no
+
+    def process_results(self, doc, results):
+        ll_yes, ll_no = results
+        gold = doc["label"]
+
+        #here the label is opposite to superglue wsc
+        acc = 1.0 if (ll_yes < ll_no) == gold else 0.0
+
+        return {"acc": acc}
+
+    def higher_is_better(self):
+        return {"acc": True}
+
+    def aggregation(self):
+        return {"acc": mean}
+    
+#class TNEWS
+
+#''' Classify the following input text into one of the following fifteen categories: [%s]
+#Input Text: 曼联主场追平阿森纳
+#Category: '''%(','.join(labels))
