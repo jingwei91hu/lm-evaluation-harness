@@ -493,6 +493,14 @@ class SGWinogradSchemaChallenge(Task):
     def has_test_docs(self):
         return False
 
+    def training_docs(self):
+        if self.has_training_docs():
+            if self._training_docs is None:
+                # GPT-3 Paper's format only uses positive examples for fewshot "training"
+                self._training_docs = [
+                    doc for doc in self.dataset["train"] if doc["label"] == 0
+                ]
+        return self._training_docs
 
     def validation_docs(self):
         return self.dataset["validation"]
