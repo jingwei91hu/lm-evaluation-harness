@@ -92,6 +92,7 @@ TASK_REGISTRY = {
     "afqmc":clue.AFQMC,
     "c3":clue.C3,
     "chid":clue.CHID,
+    "cluewsc":clue.WSC
     # GLUE
     "cola": glue.CoLA,
     "mnli": glue.MNLI,
