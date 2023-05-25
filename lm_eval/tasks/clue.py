@@ -245,14 +245,16 @@ class ChnSentiCorp(Task):
         return self._training_docs
 
     def validation_docs(self):
-        return self.dataset["validation"]
+        if self.has_validation_docs():
+            return self.dataset["validation"]
 
-    def validation_docs(self):
-        return self.dataset["test"]
-    
+    def test_docs(self):
+        if self.has_test_docs():
+            return self.dataset["test"]
+
     def doc_to_text(self, doc):
-        return "{}\nQuestion: Is this sentence positive or negative?\nAnswer:".format(
-            general_detokenize(doc["text"]),
+        return "Sentence: {}\nQuestion: Is this sentence positive or negative?\nAnswer:".format(
+            doc["text"].strip(),
         )
 
     def doc_to_target(self, doc):
