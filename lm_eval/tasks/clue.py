@@ -224,6 +224,56 @@ class Cmrc2018(Task):
             "best_f1": True,  # Best F1 (with varying threshold)
         }
     
+    
+class ChnSentiCorp(Task):
+    VERSION = 0
+    DATASET_PATH = "lansinuote/ChnSentiCorp"
+    DATASET_NAME = None
+
+    def has_training_docs(self):
+        return True
+
+    def has_validation_docs(self):
+        return True
+
+    def has_test_docs(self):
+        return True
+
+    def training_docs(self):
+        if self._training_docs is None:
+            self._training_docs = list(self.dataset["train"])
+        return self._training_docs
+
+    def validation_docs(self):
+        return self.dataset["validation"]
+
+    def validation_docs(self):
+        return self.dataset["test"]
+    
+    def doc_to_text(self, doc):
+        return "{}\nQuestion: Is this sentence positive or negative?\nAnswer:".format(
+            general_detokenize(doc["text"]),
+        )
+
+    def doc_to_target(self, doc):
+        return " {}".format({1: "positive", 0: "negative"}[doc["label"]])
+
+    def construct_requests(self, doc, ctx):
+        ll_positive, _ = rf.loglikelihood(ctx, " positive")
+        ll_negative, _ = rf.loglikelihood(ctx, " negative")
+        return ll_positive, ll_negative
+
+    def process_results(self, doc, results):
+        ll_positive, ll_negative = results
+        pred = ll_positive > ll_negative
+        gold = doc["label"]
+        return {"acc": pred == gold}
+
+    def higher_is_better(self):
+        return {"acc": True}
+
+    def aggregation(self):
+        return {"acc": mean}
 
 class OCNLI(Task):
     VERSION = 0
@@ -544,6 +594,67 @@ class SGWinogradSchemaChallenge(Task):
 
     def aggregation(self):
         return {"acc": mean}
+    
+class ChnLogiQA(MultipleChoiceTask):
+    VERSION = 0
+    DATASET_PATH = "jiacheng-ye/logiqa-zh"
+    DATASET_NAME = None
+
+    def has_training_docs(self):
+        return True
+
+    def has_validation_docs(self):
+        return True
+
+    def has_test_docs(self):
+        return True
+
+    def training_docs(self):
+        if self._training_docs is None:
+            self._training_docs = list(map(self._process_doc, self.dataset["train"]))
+        return self._training_docs
+
+    def validation_docs(self):
+        return map(self._process_doc, self.dataset["validation"])
+
+    def test_docs(self):
+        return map(self._process_doc, self.dataset["test"])
+
+    def _process_doc(self, doc):
+        def format_example(doc, choices):
+            """
+            Passage: <passage>
+            Question: <question>
+            Choices:
+            A. <choice1>
+            B. <choice2>
+            C. <choice3>
+            D. <choice4>
+            Answer:
+            """
+            prompt = "Passage: " + doc["context"] + "\n"
+            prompt += "Question: " + doc["query"] + "\nChoices:\n"
+            for choice, option in zip(choices, doc["options"]):
+                prompt += f"{choice.upper()}. {option}\n"
+            prompt += "Answer:"
+            return prompt
+
+        choices = ["a", "b", "c", "d"]
+        return {
+            "passage": doc["context"],  # Used for decontamination
+            "query": format_example(doc, choices),
+            "choices": doc["options"],
+            "gold": doc["correct_option"],
+        }
+
+    def doc_to_text(self, doc):
+        return doc["query"]
+
+    def should_decontaminate(self):
+        return True
+
+    def doc_to_decontamination_query(self, doc):
+        return doc["passage"]
     
 #class TNEWS
 
