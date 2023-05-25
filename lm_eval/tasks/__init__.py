@@ -93,6 +93,8 @@ TASK_REGISTRY = {
     "c3":clue.C3,
     "chid":clue.CHID,
     "cluewsc":clue.SGWinogradSchemaChallenge,
+    "chnSentiCorp":clue.ChnSentiCorp,
+    "chnLogiQA":clue.ChnLogiQA,
     # GLUE
     "cola": glue.CoLA,
     "mnli": glue.MNLI,
